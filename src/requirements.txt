@@ -1,10 +1,2 @@
-pandas
-numpy
-requests
-scikit-learn
 imbalanced-learn
-joblib
-pytest
-jupyter
-matplotlib
-seaborn
+requests
