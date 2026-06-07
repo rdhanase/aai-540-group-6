@@ -9,7 +9,7 @@ ENDPOINTS = {
     'persons': "https://data.cityofnewyork.us/resource/f55k-p6yu.json"
 }
 
-def pull_data(url, limit=100000):
+def pull_data(url, limit=50000):
     """
     Grabs data from Socrata API. 
     Using a 100k limit to ensure stability in SageMaker.
@@ -44,13 +44,13 @@ def sync_data(crashes, vehicles, persons):
 if __name__ == "__main__":
     # Quick sanity check
     try:
-        c = pull_data(ENDPOINTS['crashes'], limit=1000)
-        v = pull_data(ENDPOINTS['vehicles'], limit=1000)
-        p = pull_data(ENDPOINTS['persons'], limit=1000)
+        c = pull_data(ENDPOINTS['crashes'], limit=50000)
+        v = pull_data(ENDPOINTS['vehicles'], limit=50000)
+        p = pull_data(ENDPOINTS['persons'], limit=50000)
         
         df = sync_data(c, v, p)
         
-        out_dir = 'aai-540-group-6/data/raw'
+        out_dir = 'data/raw'
         os.makedirs(out_dir, exist_ok=True)
         df.to_csv(f"{out_dir}/merged_sample.csv", index=False)
         print(f"Sample saved to {out_dir}/merged_sample.csv")
