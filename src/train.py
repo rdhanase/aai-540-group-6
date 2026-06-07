@@ -79,4 +79,4 @@ def execute_training(limit=20000):
     return clf, X_test, y_test
 
 if __name__ == "__main__":
-    execute_training(limit=5000)
+    execute_training(limit=100000)

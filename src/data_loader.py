@@ -9,10 +9,10 @@ ENDPOINTS = {
     'persons': "https://data.cityofnewyork.us/resource/f55k-p6yu.json"
 }
 
-def pull_data(url, limit=50000):
+def pull_data(url, limit=100000):
     """
     Grabs data from Socrata API. 
-    Using a limit to keep things manageable for local dev.
+    Using a 100k limit to ensure stability in SageMaker.
     """
     print(f"Pulling from {url} (limit: {limit})")
     try:
