@@ -2,6 +2,7 @@ import argparse
 import os
 import joblib
 import pandas as pd
+import io
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
@@ -20,6 +21,29 @@ def model_fn(model_dir):
     model_path = os.path.join(model_dir, "model.joblib")
     print(f"Loading model from {model_path}")
     return joblib.load(model_path)
+
+def input_fn(request_body, request_content_type):
+    """
+    Parses the incoming request. We expect a CSV without a header.
+    Converts it to a DataFrame with the correct column names so our pipeline works.
+    """
+    if request_content_type == 'text/csv':
+        # Load the CSV line(s) into a dataframe
+        df = pd.read_csv(io.StringIO(request_body), header=None)
+        
+        # SageMaker InputFilter $[1:] strips the ID column.
+        # These names must match the order in our training features.
+        feature_names = ['borough', 'month', 'hour', 'is_rush_hour', 'is_weekend', 'cause_category', 'vehicle_type']
+        df.columns = feature_names
+        return df
+    else:
+        raise ValueError(f"Unsupported content type: {request_content_type}")
+
+def predict_fn(input_data, model):
+    """
+    Makes predictions using the loaded model pipeline.
+    """
+    return model.predict(input_data)
 
 def run_train(args):
     """
