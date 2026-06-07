@@ -29,10 +29,16 @@ def run_train(args):
     print(f"Loaded {len(df)} rows.")
 
     # 1. Pipeline
-    df = run_prep(df)
-    df = run_engineering(df)
+    # Only run if raw columns are present. If from Feature Store, skip.
+    if 'number_of_persons_injured' in df.columns:
+        print("Raw data detected. Running full pipeline...")
+        df = run_prep(df)
+        df = run_engineering(df)
+    else:
+        print("Processed data detected (Feature Store). Skipping engineering...")
     
     # 2. Features
+    # Ensure column names match our consolidated features engine
     feature_cols = ['borough', 'month', 'hour', 'is_rush_hour', 'is_weekend', 'cause_category', 'vehicle_type']
     X = df[feature_cols]
     y = df['target']
