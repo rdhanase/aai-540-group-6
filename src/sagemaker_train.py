@@ -40,6 +40,18 @@ def input_fn(request_body, request_content_type):
         # These names must match the order in our training features.
         feature_names = ['borough', 'month', 'hour', 'is_rush_hour', 'is_weekend', 'cause_category', 'vehicle_type']
         df.columns = feature_names
+
+        # Crucial for ColumnTransformer: Ensure data types match training
+        df['month'] = pd.to_numeric(df['month'], errors='coerce')
+        df['hour'] = pd.to_numeric(df['hour'], errors='coerce')
+        df['is_rush_hour'] = pd.to_numeric(df['is_rush_hour'], errors='coerce')
+        df['is_weekend'] = pd.to_numeric(df['is_weekend'], errors='coerce')
+        
+        # Cast categoricals explicitly to string to avoid object type confusion
+        df['borough'] = df['borough'].astype(str)
+        df['cause_category'] = df['cause_category'].astype(str)
+        df['vehicle_type'] = df['vehicle_type'].astype(str)
+        
         return df
     else:
         raise ValueError(f"Unsupported content type: {request_content_type}")
