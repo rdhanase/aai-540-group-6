@@ -1,53 +1,54 @@
 import pandas as pd
 import numpy as np
 
-def create_target(df):
+def prep_target(df):
     """
-    Defines the ML problem: Predict if a crash results in injury or fatality.
-    Target: 1 if injured/killed > 0, else 0.
+    Define the binary target. 
+    We care if anyone was hurt or killed - safety first.
     """
-    # Convert injury/killed columns to numeric, handling potential strings from API
-    inj_cols = ['number_of_persons_injured', 'number_of_persons_killed']
-    for col in inj_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    # API data can come in as strings, so cast everything to numeric to be safe
+    cols = ['number_of_persons_injured', 'number_of_persons_killed']
+    for c in cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
     
+    # 1 if injury/death, 0 if just property damage
     df['target'] = ((df['number_of_persons_injured'] > 0) | (df['number_of_persons_killed'] > 0)).astype(int)
     
-    counts = df['target'].value_counts()
-    print(f"Target distribution:\n{counts}")
+    print("Class balance (0: Property, 1: Injury):")
+    print(df['target'].value_counts(normalize=True))
     return df
 
-def clean_data(df):
+def basic_cleaning(df):
     """
-    Basic cleaning: handling missing values and data types.
+    Handle the messier parts of the NYC data.
     """
-    # Fill missing boroughs
+    # Fill missing boroughs - important for location analysis
     if 'borough' in df.columns:
         df['borough'] = df['borough'].fillna('UNKNOWN')
     
-    # Fill missing contributing factors
+    # Contributing factors often missing for vehicle 1
     if 'contributing_factor_vehicle_1' in df.columns:
         df['contributing_factor_vehicle_1'] = df['contributing_factor_vehicle_1'].fillna('Unspecified')
     
-    # Convert crash_date to datetime
+    # Convert timestamps
     if 'crash_date' in df.columns:
         df['crash_date'] = pd.to_datetime(df['crash_date'])
     
-    # Drop redundant or high-cardinality columns not used in initial baseline
-    cols_to_drop = [
+    # Drop stuff we don't need for the baseline model to save memory
+    to_drop = [
         'location', 'on_street_name', 'off_street_name', 'cross_street_name',
         'number_of_persons_injured', 'number_of_persons_killed',
         'number_of_pedestrians_injured', 'number_of_pedestrians_killed',
         'number_of_cyclist_injured', 'number_of_cyclist_killed',
         'number_of_motorist_injured', 'number_of_motorist_killed'
     ]
-    df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
+    df = df.drop(columns=[c for c in to_drop if c in df.columns])
     
     return df
 
-def preprocess_pipeline(df):
-    """Full preprocessing sequence."""
-    df = create_target(df)
-    df = clean_data(df)
+def run_prep(df):
+    """Standard prep flow used by all notebooks."""
+    df = prep_target(df)
+    df = basic_cleaning(df)
     return df

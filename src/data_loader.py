@@ -2,61 +2,57 @@ import pandas as pd
 import requests
 import os
 
-# Socrata API Endpoints for NYC Motor Vehicle Collisions
-CRASHES_URL = "https://data.cityofnewyork.us/resource/h9gi-nx95.json"
-VEHICLES_URL = "https://data.cityofnewyork.us/resource/bm4k-52h4.json"
-PERSONS_URL = "https://data.cityofnewyork.us/resource/f55k-p6yu.json"
+# NYC Open Data Socrata Endpoints
+ENDPOINTS = {
+    'crashes': "https://data.cityofnewyork.us/resource/h9gi-nx95.json",
+    'vehicles': "https://data.cityofnewyork.us/resource/bm4k-52h4.json",
+    'persons': "https://data.cityofnewyork.us/resource/f55k-p6yu.json"
+}
 
-def fetch_socrata_data(url, limit=50000):
+def pull_data(url, limit=50000):
     """
-    Fetch data from NYC Open Data Socrata API.
+    Grabs data from Socrata API. 
+    Using a limit to keep things manageable for local dev.
     """
-    print(f"Fetching data from {url} (limit={limit})...")
-    params = {'$limit': limit}
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        return pd.DataFrame(response.json())
-    else:
-        raise Exception(f"Failed to fetch data from {url}: {response.status_code}")
+    print(f"Pulling from {url} (limit: {limit})")
+    try:
+        r = requests.get(url, params={'$limit': limit})
+        r.raise_for_status()
+        return pd.DataFrame(r.json())
+    except Exception as e:
+        print(f"API request failed: {e}")
+        raise
 
-def save_raw_data(df, filename, folder='aai-540-group-6/data/raw'):
-    """Save the raw dataframe to a local CSV file."""
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, filename)
-    df.to_csv(path, index=False)
-    print(f"Saved {filename} to {path}")
-    return path
-
-def merge_datasets(crashes_df, vehicles_df, persons_df):
+def sync_data(crashes, vehicles, persons):
     """
-    Merge the three datasets on collision_id.
-    Ensures situational context from vehicles and persons is added to crashes.
+    Joins the three NYC datasets on collision_id.
+    Standardizes ID types to avoid merge issues.
     """
-    print("Merging datasets on collision_id...")
+    print("Syncing datasets on collision_id...")
     
-    # Ensure collision_id is string for consistent merging
-    for df in [crashes_df, vehicles_df, persons_df]:
+    # Cast IDs to strings just in case
+    for df in [crashes, vehicles, persons]:
         if 'collision_id' in df.columns:
             df['collision_id'] = df['collision_id'].astype(str)
 
-    # Merge Crashes and Vehicles
-    # One crash can have multiple vehicles; we'll keep all for now
-    merged_df = crashes_df.merge(vehicles_df, on='collision_id', how='left', suffixes=('', '_veh'))
+    # Left join to keep all crashes even if vehicle/person info is missing
+    merged = crashes.merge(vehicles, on='collision_id', how='left', suffixes=('', '_v'))
+    merged = merged.merge(persons, on='collision_id', how='left', suffixes=('', '_p'))
     
-    # Merge with Persons
-    merged_df = merged_df.merge(persons_df, on='collision_id', how='left', suffixes=('', '_pers'))
-    
-    print(f"Merged dataset shape: {merged_df.shape}")
-    return merged_df
+    return merged
 
 if __name__ == "__main__":
-    # Test fetch and merge with a small limit
+    # Quick sanity check
     try:
-        c_df = fetch_socrata_data(CRASHES_URL, limit=1000)
-        v_df = fetch_socrata_data(VEHICLES_URL, limit=1000)
-        p_df = fetch_socrata_data(PERSONS_URL, limit=1000)
+        c = pull_data(ENDPOINTS['crashes'], limit=1000)
+        v = pull_data(ENDPOINTS['vehicles'], limit=1000)
+        p = pull_data(ENDPOINTS['persons'], limit=1000)
         
-        merged = merge_datasets(c_df, v_df, p_df)
-        save_raw_data(merged, 'merged_sample.csv')
+        df = sync_data(c, v, p)
+        
+        out_dir = 'aai-540-group-6/data/raw'
+        os.makedirs(out_dir, exist_ok=True)
+        df.to_csv(f"{out_dir}/merged_sample.csv", index=False)
+        print(f"Sample saved to {out_dir}/merged_sample.csv")
     except Exception as e:
-        print(f"Error during data loading: {e}")
+        print(f"Script failed: {e}")

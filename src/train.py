@@ -4,82 +4,79 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
 import joblib
 import os
 
-from data_loader import fetch_socrata_data, CRASHES_URL, VEHICLES_URL, PERSONS_URL, merge_datasets
-from preprocessing import preprocess_pipeline
-from features import feature_engineering_pipeline
+from data_loader import pull_data, sync_data, ENDPOINTS
+from preprocessing import run_prep
+from features import run_engineering
+from evaluate import evaluate_model
 
-def train_baseline_model(limit=20000):
+def execute_training(limit=20000):
     """
-    Complete training pipeline: Ingestion -> Preprocessing -> Features -> SMOTE -> RF.
+    Main training script. 
+    Flow: Fetch -> Merge -> Prep -> Engineer -> Balance (SMOTE) -> Train.
     """
-    print(f"Starting training pipeline with limit={limit}...")
+    print(f"Executing training flow (Sample size: {limit})")
     
-    # 1. Data Acquisition
+    # 1. Ingestion
     try:
-        c_df = fetch_socrata_data(CRASHES_URL, limit=limit)
-        v_df = fetch_socrata_data(VEHICLES_URL, limit=limit)
-        p_df = fetch_socrata_data(PERSONS_URL, limit=limit)
-        df = merge_datasets(c_df, v_df, p_df)
+        c = pull_data(ENDPOINTS['crashes'], limit=limit)
+        v = pull_data(ENDPOINTS['vehicles'], limit=limit)
+        p = pull_data(ENDPOINTS['persons'], limit=limit)
+        df = sync_data(c, v, p)
     except Exception as e:
-        print(f"Error loading data: {e}")
+        print(f"Data loading failed: {e}")
         return
     
-    # 2. Preprocessing & Feature Engineering
-    df = preprocess_pipeline(df)
-    df = feature_engineering_pipeline(df)
+    # 2. Pipeline
+    df = run_prep(df)
+    df = run_engineering(df)
     
-    # 3. Feature Selection
-    # Selected based on hypothesis in Design Doc
-    features = ['borough', 'crash_month', 'crash_day_of_week', 'crash_hour', 'factor_category']
-    X = df[features]
+    # 3. Model Inputs
+    # Features selected based on initial hypothesis
+    feature_cols = ['borough', 'month', 'hour', 'is_rush_hour', 'is_weekend', 'cause_category', 'vehicle_type']
+    X = df[feature_cols]
     y = df['target']
     
-    # 4. Train/Test Split (Stratified)
+    # 80/20 split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
-    print(f"Train size: {X_train.shape}, Test size: {X_test.shape}")
+    print(f"Training on {len(X_train)} samples, testing on {len(X_test)}.")
     
-    # 5. Pipeline Definition
-    # We use imblearn.pipeline.Pipeline to correctly apply SMOTE during CV
-    categorical_features = ['borough', 'factor_category']
-    categorical_transformer = OneHotEncoder(handle_unknown='ignore')
+    # 4. Define Pipeline
+    # Transformer for categories
+    cat_cols = ['borough', 'cause_category', 'vehicle_type']
+    cat_transformer = OneHotEncoder(handle_unknown='ignore')
     
     preprocessor = ColumnTransformer(
-        transformers=[
-            ('cat', categorical_transformer, categorical_features)
-        ],
+        transformers=[('cat', cat_transformer, cat_cols)],
         remainder='passthrough'
     )
     
-    model_pipeline = ImbPipeline(steps=[
-        ('preprocessor', preprocessor),
+    # Bundle SMOTE and RF to ensure balancing happens per-fold
+    clf = ImbPipeline(steps=[
+        ('prep', preprocessor),
         ('smote', SMOTE(random_state=42)),
-        ('classifier', RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42))
+        ('rf', RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42))
     ])
     
-    # 6. Training
-    print("Training Random Forest with SMOTE...")
-    model_pipeline.fit(X_train, y_train)
+    # 5. Execute
+    print("Fitting model with SMOTE...")
+    clf.fit(X_train, y_train)
     
-    # 7. Persistence
+    # 6. Save & Evaluate
     os.makedirs('aai-540-group-6/models', exist_ok=True)
-    model_path = 'aai-540-group-6/models/rf_baseline.joblib'
-    joblib.dump(model_pipeline, model_path)
-    print(f"Model saved to {model_path}")
+    model_file = 'aai-540-group-6/models/rf_v1.joblib'
+    joblib.dump(clf, model_file)
+    print(f"Model serialized to {model_file}")
     
-    # 8. Evaluation
-    from evaluate import evaluate_model
-    evaluate_model(model_pipeline, X_test, y_test)
+    evaluate_model(clf, X_test, y_test)
     
-    return model_pipeline, X_test, y_test
+    return clf, X_test, y_test
 
 if __name__ == "__main__":
-    # Run with a moderate limit for local validation
-    train_baseline_model(limit=5000)
+    execute_training(limit=5000)
