@@ -13,6 +13,14 @@ from imblearn.pipeline import Pipeline as ImbPipeline
 from preprocessing import run_prep
 from features import run_engineering
 
+def model_fn(model_dir):
+    """
+    Deserializes and loads the model for SageMaker inference (Batch Transform).
+    """
+    model_path = os.path.join(model_dir, "model.joblib")
+    print(f"Loading model from {model_path}")
+    return joblib.load(model_path)
+
 def run_train(args):
     """
     Entry point for SageMaker Training Job.
