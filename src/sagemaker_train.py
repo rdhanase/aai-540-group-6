@@ -2,6 +2,7 @@ import argparse
 import os
 import joblib
 import pandas as pd
+import io
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
@@ -12,6 +13,54 @@ from imblearn.pipeline import Pipeline as ImbPipeline
 # Pull from local modules
 from preprocessing import run_prep
 from features import run_engineering
+
+def model_fn(model_dir):
+    """
+    Deserializes and loads the model for SageMaker inference (Batch Transform).
+    """
+    model_path = os.path.join(model_dir, "model.joblib")
+    print(f"Loading model from {model_path}")
+    return joblib.load(model_path)
+
+def input_fn(request_body, request_content_type):
+    """
+    Parses the incoming request. We expect a CSV without a header.
+    Converts it to a DataFrame with the correct column names so our pipeline works.
+    """
+    if request_content_type == 'text/csv':
+        # Load the CSV line(s) into a dataframe
+        df = pd.read_csv(io.StringIO(request_body), header=None)
+        
+        # # Robust Header Check: If the first row contains string 'hour' (a feature name), drop it
+        # if df.iloc[0].astype(str).str.contains('hour').any():
+        #     print("Header detected in inference data. Dropping first row...")
+        #     df = df.iloc[1:].reset_index(drop=True)
+
+        # SageMaker InputFilter $[1:] strips the ID column.
+        # These names must match the order in our training features.
+        feature_names = ['borough', 'month', 'hour', 'is_rush_hour', 'is_weekend', 'cause_category', 'vehicle_type']
+        df.columns = feature_names
+
+        # Crucial for ColumnTransformer: Ensure data types match training
+        df['month'] = pd.to_numeric(df['month'], errors='coerce')
+        df['hour'] = pd.to_numeric(df['hour'], errors='coerce')
+        df['is_rush_hour'] = pd.to_numeric(df['is_rush_hour'], errors='coerce')
+        df['is_weekend'] = pd.to_numeric(df['is_weekend'], errors='coerce')
+        
+        # Cast categoricals explicitly to string to avoid object type confusion
+        df['borough'] = df['borough'].astype(str)
+        df['cause_category'] = df['cause_category'].astype(str)
+        df['vehicle_type'] = df['vehicle_type'].astype(str)
+        
+        return df
+    else:
+        raise ValueError(f"Unsupported content type: {request_content_type}")
+
+def predict_fn(input_data, model):
+    """
+    Makes predictions using the loaded model pipeline.
+    """
+    return model.predict(input_data)
 
 def run_train(args):
     """
