@@ -31,10 +31,10 @@ def input_fn(request_body, request_content_type):
         # Load the CSV line(s) into a dataframe
         df = pd.read_csv(io.StringIO(request_body), header=None)
         
-        # Robust Header Check: If the first row contains string 'hour' (a feature name), drop it
-        if df.iloc[0].astype(str).str.contains('hour').any():
-            print("Header detected in inference data. Dropping first row...")
-            df = df.iloc[1:].reset_index(drop=True)
+        # # Robust Header Check: If the first row contains string 'hour' (a feature name), drop it
+        # if df.iloc[0].astype(str).str.contains('hour').any():
+        #     print("Header detected in inference data. Dropping first row...")
+        #     df = df.iloc[1:].reset_index(drop=True)
 
         # SageMaker InputFilter $[1:] strips the ID column.
         # These names must match the order in our training features.
